@@ -8,6 +8,8 @@
 #include <chrono>
 #include <omp.h>
 
+#define partsPerUnit 300
+
 using namespace std;
 
 void waitSomeTime(double t) {/*
@@ -24,52 +26,86 @@ void waitSomeTime(double t) {/*
 }
 
 class My {
-public:
+private:
 
+	double para1[100]; double para2[100]; double seria[100]; 
+public:
 	void integrateParallel1(double a, double b, int ki, int kf)
 	{
-		cout << "Integral I(k) z " << "f(x)=exp(-3 * x*pow(k, 0.5)) / (1 + x)" << " from a = " << a << " to b = " << b << endl;
-		int numOfParts = (int)(b - a) * 3000;
+		//cout << "Integral I(k) z " << "f(x)=exp(-3 * x*pow(k, 0.5)) / (1 + x)" << " from a = " << a << " to b = " << b << endl;
+		int numOfParts = (int)(b - a) * partsPerUnit;
 		double dx = (b - a) / (numOfParts);
 
-		double sum = 0;  int i = 0;
-#pragma omp parallel for private(i) schedule(static) reduction(+:sum)
-		for (int k = kf; k >= ki; k--)
+		double sum = 0;  int i = 0; int k;
+#pragma omp parallel for private(k) schedule(static) reduction(+:sum)
+		for (k = kf; k >= ki; k--)
 		{
-			waitSomeTime(1000);
 			sum = 0;
+#pragma omp parallel for private(i) schedule(static) reduction(+:sum)
 			for (i = 0; i<numOfParts; i++)
 			{
 				sum += fun(a + i*dx + dx / 2, k);
 			}
 			sum *= dx;
 #pragma omp critical
-			cout << "for k = " << k << " I(" << k << ") = " << sum << endl;
+			//cout << "for k = " << k << " I(" << k << ") = " << sum << endl;
+			para1[k - 1] = sum;
 		}
 	}
 
 	void integrateParallel2(double a, double b, int ki, int kf)
 	{
-		cout << "Integral I(k) z " << "f(x)=exp(-3 * x*pow(k, 0.5)) / (1 + x)" << " from a = " << a << " to b = " << b << endl;
-		int numOfParts = (int)(b - a) * 3000;
+		//cout << "Integral I(k) z " << "f(x)=exp(-3 * x*pow(k, 0.5)) / (1 + x)" << " from a = " << a << " to b = " << b << endl;
+		int numOfParts = (int)(b - a) * partsPerUnit;
 		double dx = (b - a) / (numOfParts);
 
-		double sum = 0;  int i = 0;
-#pragma omp parallel for private(i) schedule(dynamic) reduction(+:sum)
-		for (int k = kf; k >= ki; k--)
+		double sum = 0;  int i = 0; int k;
+#pragma omp parallel for private(k) schedule(dynamic) reduction(+:sum)
+		for (k = kf; k >= ki; k--)
 		{
-			waitSomeTime(1000);
 			sum = 0;
+#pragma omp parallel for private(i) schedule(dynamic) reduction(+:sum)
 			for (i = 0; i<numOfParts; i++)
 			{
 				sum += fun(a + i*dx + dx / 2, k);
 			}
 			sum *= dx;
 #pragma omp critical
-			cout << "for k = " << k << " I(" << k << ") = " << sum << endl;
+			para2[k - 1] = sum; ;// cout << "for k = " << k << " I(" << k << ") = " << sum << endl;
+		}
+	}
+	void integrateSerial(double a, double b, int ki, int kf)
+	{
+		//cout << "Integral I(k) z " << "f(x)=exp(-3 * x*pow(k, 0.5)) / (1 + x)" << " from a = " << a << " to b = " << b << endl;
+		int numOfParts = (int)(b - a) * partsPerUnit;
+		double dx = (b - a) / (numOfParts);
+
+		double sum = 0;  int i = 0;
+		for (int k = kf; k >= ki; k--)
+		{
+			sum = 0;
+			for (i = 0; i<numOfParts; i++)
+			{
+				sum += fun(a + i*dx + dx / 2, k);
+			}
+			sum *= dx;
+			seria[k - 1] = sum; ;// cout << "for k = " << k << " I(" << k << ") = " << sum << endl;
 		}
 	}
 
+	void checkEquality() {
+		bool para1EqualsSerial = true; bool para2EqualsSerial = true;
+		for (int i = 0; i < 100; i++) {
+			//cout << para1[i] << "\t" << seria[i] << "\t" << para2[i] << endl;
+			printf("%10f\t%10f\t%10f\n", (float)para1[i], (float)seria[i], (float)para2[i]);
+			//cout << para1[i] << endl;cout << seria[i]  << endl;cout << para2[i] << endl;
+			if (para1[i] != seria[i])para1EqualsSerial = false;
+			if (para2[i] != seria[i])para2EqualsSerial = false;
+			if (para1EqualsSerial == false && para2EqualsSerial == false)break;
+		}
+		if (para1EqualsSerial)cout << "LEFT == MIDDLE"; else cout << "LEFT != MIDDLE"; cout << "\t\t";
+		if (para2EqualsSerial)cout << "RIGHT == MIDDLE"; else cout << "RIGHT != MIDDLE"; cout << "\t";
+	}
 
 
 	double fun(double x, int k)
@@ -89,7 +125,8 @@ void lockScreen()
 
 int main() {
 	My m;
-	m.integrateParallel1(0, 300, 1, 100);
+	m.integrateParallel1(0, 300, 1, 100); m.integrateParallel2(0, 300, 1, 100); m.integrateSerial(0, 300, 1, 100);
+	m.checkEquality();
 	lockScreen();
 
 }
